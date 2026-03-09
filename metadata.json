@@ -1,0 +1,8 @@
+{
+  "name": "Apuntes App",
+  "description": "App to save class notes (text, audio, video) and generate study materials like reports and presentations.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
