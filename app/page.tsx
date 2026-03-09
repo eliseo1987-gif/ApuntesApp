@@ -2,14 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { FileText, Mic, Video, Plus, ArrowRight, Clock, Calendar as CalendarIcon, Sparkles, TrendingUp } from 'lucide-react';
-import { getNotes, getGrades, getSubjects } from '@/lib/store';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { FileText, Mic, Video, Plus, ArrowRight, Clock, Calendar as CalendarIcon, Sparkles, TrendingUp, Trash2, X, Table } from 'lucide-react';
+import { getNotes, getGrades, getSubjects, getSchedules, addSchedule, deleteSchedule } from '@/lib/store';
 
 export default function Dashboard() {
   const [recentNotes, setRecentNotes] = useState<any[]>([]);
   const [totalNotes, setTotalNotes] = useState(0);
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
+  const [grades, setGrades] = useState<any[]>([]);
+  
+  // Schedule form state
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [newScheduleSubject, setNewScheduleSubject] = useState('');
+  const [newScheduleDay, setNewScheduleDay] = useState('1');
+  const [newScheduleStart, setNewScheduleStart] = useState('08:00');
+  const [newScheduleEnd, setNewScheduleEnd] = useState('10:00');
 
   useEffect(() => {
     const loadData = () => {
@@ -18,47 +26,78 @@ export default function Dashboard() {
       setRecentNotes(notes.slice(0, 3));
 
       const grades = getGrades();
-      const subjects = getSubjects();
+      setGrades(grades);
+      const loadedSubjects = getSubjects();
+      setSubjects(loadedSubjects);
+      if (loadedSubjects.length > 0) {
+        setNewScheduleSubject(loadedSubjects[0].name);
+      }
       
-      const data = subjects.map((subject: any) => {
-        const subjectGrades = grades.filter((g: any) => g.subjectName === subject.name);
-        let percentage = 0;
-        if (subjectGrades.length > 0) {
-          const totalScore = subjectGrades.reduce((acc: number, g: any) => acc + (g.score / g.maxScore), 0);
-          percentage = (totalScore / subjectGrades.length) * 100;
-        }
-        
-        // Extract color hex or use a default if it's a tailwind class
-        let fill = '#6366f1'; // default indigo-500
-        if (subject.color.includes('blue')) fill = '#3b82f6';
-        else if (subject.color.includes('orange')) fill = '#f97316';
-        else if (subject.color.includes('purple')) fill = '#a855f7';
-        else if (subject.color.includes('emerald')) fill = '#10b981';
-        else if (subject.color.includes('rose')) fill = '#f43f5e';
-
-        return {
-          name: subject.name.length > 15 ? subject.name.substring(0, 15) + '...' : subject.name,
-          promedio: parseFloat(percentage.toFixed(1)),
-          fill
-        };
-      }).filter((d: any) => d.promedio > 0);
-
-      setChartData(data);
+      const loadedSchedules = getSchedules();
+      setSchedules(loadedSchedules);
     };
     loadData();
   }, []);
 
+  const handleAddSchedule = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newScheduleSubject || !newScheduleDay || !newScheduleStart || !newScheduleEnd) return;
+    
+    const schedule = addSchedule({
+      subjectName: newScheduleSubject,
+      dayOfWeek: parseInt(newScheduleDay),
+      startTime: newScheduleStart,
+      endTime: newScheduleEnd
+    });
+    
+    setSchedules([...schedules, schedule]);
+    setShowScheduleForm(false);
+  };
+
+  const handleDeleteSchedule = (id: string) => {
+    deleteSchedule(id);
+    setSchedules(schedules.filter(s => s.id !== id));
+  };
+
+  const days = [
+    { id: 1, name: 'Lunes' },
+    { id: 2, name: 'Martes' },
+    { id: 3, name: 'Miércoles' },
+    { id: 4, name: 'Jueves' },
+    { id: 5, name: 'Viernes' },
+  ];
+
+  const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 to 20:00
+
+  const getScheduleStyle = (schedule: any) => {
+    const startParts = schedule.startTime.split(':');
+    const endParts = schedule.endTime.split(':');
+    
+    const startHour = parseInt(startParts[0]) + parseInt(startParts[1]) / 60;
+    const endHour = parseInt(endParts[0]) + parseInt(endParts[1]) / 60;
+    
+    const top = (startHour - 8) * 60; // 60px per hour, starting at 8:00
+    const height = (endHour - startHour) * 60;
+    
+    const subject = subjects.find(s => s.name === schedule.subjectName);
+    const colorClass = subject ? subject.color : 'bg-slate-100 text-slate-600';
+    
+    return { top: `${top}px`, height: `${height}px`, colorClass };
+  };
+
+  const columns = ['F1', '1P', 'F2', '2P', 'F3', '3P', 'FT', 'EF', 'PGE', 'EXF', 'TSF', 'PFE'];
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      <header className="flex justify-between items-end">
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
-          <h1 className="text-4xl font-bold font-display text-slate-900 tracking-tight">Hola, Eliseo 👋</h1>
-          <p className="text-slate-500 mt-2 text-lg">¿Qué vamos a estudiar hoy?</p>
+          <h1 className="text-3xl sm:text-4xl font-bold font-display text-slate-900 tracking-tight">Hola, Eliseo 👋</h1>
+          <p className="text-slate-500 mt-2 text-base sm:text-lg">¿Qué vamos a estudiar hoy?</p>
         </div>
-        <div className="flex gap-3">
-          <Link href="/notes/new" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all shadow-sm">
+        <div className="flex gap-3 w-full sm:w-auto">
+          <Link href="/notes/new" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition-all shadow-sm w-full sm:w-auto">
             <Plus className="w-5 h-5" />
-            Nuevo Apunte
+            <span>Nuevo Apunte</span>
           </Link>
         </div>
       </header>
@@ -95,43 +134,208 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Recent Notes & Chart */}
+        {/* Main Content Area */}
         <div className="lg:col-span-2 space-y-8">
-          {/* Chart Section */}
-          {chartData.length > 0 && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-              <div className="flex items-center justify-between mb-6">
+          {/* Grades Table Section */}
+          {subjects.length > 0 && (
+            <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
-                    <TrendingUp className="w-5 h-5" />
+                  <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shrink-0">
+                    <Table className="w-5 h-5" />
                   </div>
-                  <h2 className="text-xl font-bold font-display text-slate-900">Rendimiento Académico</h2>
+                  <h2 className="text-lg sm:text-xl font-bold font-display text-slate-900">Cuadro de Calificaciones</h2>
                 </div>
-                <Link href="/grades" className="text-indigo-600 hover:text-indigo-700 font-medium text-sm flex items-center gap-1">
+                <Link href="/grades" className="text-indigo-600 hover:text-indigo-700 font-medium text-sm flex items-center gap-1 shrink-0">
                   Ver detalles <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={[0, 100]} />
-                    <Tooltip 
-                      cursor={{ fill: '#f8fafc' }}
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value) => [`${value}%`, 'Promedio']}
-                    />
-                    <Bar dataKey="promedio" radius={[6, 6, 0, 0]} maxBarSize={50}>
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
+              <div className="min-w-[800px]">
+                <table className="w-full text-sm text-left border-collapse">
+                  <thead className="bg-slate-200 text-slate-700 font-bold text-xs uppercase border border-slate-400">
+                    <tr>
+                      <th className="px-4 py-2 border border-slate-400">MATERIAS</th>
+                      {columns.map(col => (
+                        <th key={col} className="px-2 py-2 border border-slate-400 text-center">{col}</th>
                       ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subjects.map((subject) => {
+                      const subjectGrades = grades.filter(g => g.subjectName === subject.name);
+                      const getGrade = (title: string) => {
+                        const g = subjectGrades.find(g => g.title.toUpperCase() === title);
+                        return g ? g.score : '';
+                      };
+                      return (
+                        <tr key={subject.id} className="border-b border-slate-300 hover:bg-slate-50">
+                          <td className="px-4 py-2 border border-slate-300 font-medium text-slate-900 uppercase">{subject.name}</td>
+                          {columns.map(col => (
+                            <td key={col} className="px-2 py-2 border border-slate-300 text-center">{getGrade(col)}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                    {/* Promedio row */}
+                    <tr className="bg-slate-100 font-bold">
+                      <td className="px-4 py-2 border border-slate-300 uppercase">PROMEDIO</td>
+                      {columns.map(col => {
+                        const allScores = grades.filter(g => g.title.toUpperCase() === col).map(g => g.score);
+                        const avg = allScores.length > 0 ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1) : '';
+                        return <td key={col} className="px-2 py-2 border border-slate-300 text-center">{avg}</td>;
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
+
+          {/* Weekly Schedule Module */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="p-4 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 shrink-0">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold font-display text-slate-900">Horario Semanal</h2>
+                  <p className="text-xs sm:text-sm text-slate-500">Organiza tus clases por hora</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowScheduleForm(!showScheduleForm)}
+                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl font-medium flex items-center justify-center gap-2 transition-all shadow-sm text-sm w-full sm:w-auto"
+              >
+                {showScheduleForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                {showScheduleForm ? 'Cancelar' : 'Añadir Clase'}
+              </button>
+            </div>
+
+            {showScheduleForm && (
+              <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50 animate-in fade-in slide-in-from-top-4 duration-300">
+                <form onSubmit={handleAddSchedule} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
+                  <div className="sm:col-span-2 md:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Materia</label>
+                    <select 
+                      value={newScheduleSubject}
+                      onChange={(e) => setNewScheduleSubject(e.target.value)}
+                      className="w-full p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm bg-white"
+                      disabled={subjects.length === 0}
+                    >
+                      {subjects.length === 0 ? (
+                        <option value="">Añade materias primero</option>
+                      ) : (
+                        subjects.map(subject => (
+                          <option key={subject.id} value={subject.name}>{subject.name}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Día</label>
+                    <select 
+                      value={newScheduleDay}
+                      onChange={(e) => setNewScheduleDay(e.target.value)}
+                      className="w-full p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm bg-white"
+                    >
+                      {days.map(day => (
+                        <option key={day.id} value={day.id}>{day.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Hora</label>
+                    <div className="flex items-center gap-1">
+                      <input 
+                        type="time" 
+                        value={newScheduleStart}
+                        onChange={(e) => setNewScheduleStart(e.target.value)}
+                        className="w-full p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs"
+                      />
+                      <span className="text-slate-400">-</span>
+                      <input 
+                        type="time" 
+                        value={newScheduleEnd}
+                        onChange={(e) => setNewScheduleEnd(e.target.value)}
+                        className="w-full p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <button 
+                      type="submit"
+                      disabled={!newScheduleSubject || subjects.length === 0}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 rounded-lg font-medium transition-all shadow-sm disabled:opacity-50 text-sm"
+                    >
+                      Guardar
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            <div className="p-4 sm:p-6 overflow-x-auto">
+              <div className="min-w-[700px]">
+                {/* Schedule Grid Header */}
+                <div className="grid grid-cols-6 border-b border-slate-200 pb-2 mb-2">
+                  <div className="text-xs font-semibold text-slate-400 text-center">Hora</div>
+                  {days.map(day => (
+                    <div key={day.id} className="text-sm font-bold text-slate-700 text-center">{day.name}</div>
+                  ))}
+                </div>
+                
+                {/* Schedule Grid Body */}
+                <div className="relative" style={{ height: `${12 * 60}px` }}> {/* 12 hours * 60px */}
+                  {/* Background grid lines */}
+                  {hours.slice(0, -1).map((hour, index) => (
+                    <div key={hour} className="absolute w-full flex border-b border-slate-100" style={{ top: `${index * 60}px`, height: '60px' }}>
+                      <div className="w-1/6 text-xs font-medium text-slate-400 text-center relative -top-2 pr-2">
+                        {`${hour.toString().padStart(2, '0')}:00`}
+                      </div>
+                      <div className="w-5/6 grid grid-cols-5">
+                        <div className="border-l border-slate-100 h-full"></div>
+                        <div className="border-l border-slate-100 h-full"></div>
+                        <div className="border-l border-slate-100 h-full"></div>
+                        <div className="border-l border-slate-100 h-full"></div>
+                        <div className="border-l border-slate-100 h-full"></div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Schedule Items */}
+                  <div className="absolute top-0 left-0 w-full h-full flex">
+                    <div className="w-1/6"></div> {/* Time column spacer */}
+                    <div className="w-5/6 grid grid-cols-5 relative">
+                      {days.map((day, dayIndex) => (
+                        <div key={day.id} className="relative h-full">
+                          {schedules.filter(s => s.dayOfWeek === day.id).map(schedule => {
+                            const style = getScheduleStyle(schedule);
+                            return (
+                              <div 
+                                key={schedule.id}
+                                className={`absolute left-1 right-1 rounded-lg p-2 border border-white/20 shadow-sm overflow-hidden group ${style.colorClass}`}
+                                style={{ top: style.top, height: style.height }}
+                              >
+                                <button 
+                                  onClick={() => handleDeleteSchedule(schedule.id)}
+                                  className="absolute top-1 right-1 p-1 bg-white/50 hover:bg-white rounded-md text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                                <p className="font-bold text-xs leading-tight mb-1">{schedule.subjectName}</p>
+                                <p className="text-[10px] opacity-80 font-medium">{schedule.startTime} - {schedule.endTime}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Recent Notes */}
           <div className="space-y-6">

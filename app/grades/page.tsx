@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, GraduationCap, Award, TrendingUp, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Trash2, GraduationCap, Award, TrendingUp, Calendar as CalendarIcon, ChevronDown, ChevronUp, BarChart3, Table } from 'lucide-react';
 import { getSubjects, getGrades, addGrade, deleteGrade, getUpcomingTests, addUpcomingTest, deleteUpcomingTest } from '@/lib/store';
 
 export default function GradesPage() {
@@ -19,6 +19,9 @@ export default function GradesPage() {
   const [testSubject, setTestSubject] = useState('');
   const [testTitle, setTestTitle] = useState('');
   const [testDate, setTestDate] = useState('');
+
+  // Chart state
+  const [showChart, setShowChart] = useState(false);
 
   useEffect(() => {
     const loadData = () => {
@@ -94,12 +97,96 @@ export default function GradesPage() {
     };
   });
 
+  const chartData = gradesBySubject.filter(s => s.grades.length > 0).map(s => ({
+    name: s.name,
+    promedio: parseFloat(s.average.toFixed(1)),
+    color: s.color.split(' ')[0].replace('bg-', '').replace('-100', '-500') // Extract a color for the chart
+  }));
+
+  // Helper to map tailwind color names to hex for Recharts
+  const getHexColor = (colorClass: string) => {
+    if (colorClass.includes('blue')) return '#3b82f6';
+    if (colorClass.includes('emerald')) return '#10b981';
+    if (colorClass.includes('rose')) return '#f43f5e';
+    if (colorClass.includes('amber')) return '#f59e0b';
+    if (colorClass.includes('purple')) return '#a855f7';
+    if (colorClass.includes('indigo')) return '#6366f1';
+    return '#94a3b8'; // default slate
+  };
+
+  const columns = ['F1', '1P', 'F2', '2P', 'F3', '3P', 'FT', 'EF', 'PGE', 'EXF', 'TSF', 'PFE'];
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      <header>
-        <h1 className="text-4xl font-bold font-display text-slate-900 tracking-tight">Calificaciones</h1>
-        <p className="text-slate-500 mt-2 text-lg">Registra tus notas y haz seguimiento de tu progreso.</p>
+      <header className="flex justify-between items-end">
+        <div>
+          <h1 className="text-4xl font-bold font-display text-slate-900 tracking-tight">Calificaciones</h1>
+          <p className="text-slate-500 mt-2 text-lg">Registra tus notas y haz seguimiento de tu progreso.</p>
+        </div>
+        <button 
+          onClick={() => setShowChart(!showChart)}
+          className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all shadow-sm"
+        >
+          <Table className="w-5 h-5 text-indigo-600" />
+          {showChart ? 'Ocultar Cuadro' : 'Ver Cuadro'}
+          {showChart ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+        </button>
       </header>
+
+      {/* Collapsible Chart Section */}
+      {showChart && subjects.length > 0 && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300 overflow-x-auto">
+          <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-indigo-600" /> Cuadro de Calificaciones
+          </h3>
+          <div className="min-w-[800px]">
+            <table className="w-full text-sm text-left border-collapse">
+              <thead className="bg-slate-200 text-slate-700 font-bold text-xs uppercase border border-slate-400">
+                <tr>
+                  <th className="px-4 py-2 border border-slate-400">MATERIAS</th>
+                  {columns.map(col => (
+                    <th key={col} className="px-2 py-2 border border-slate-400 text-center">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {subjects.map((subject) => {
+                  const subjectGrades = grades.filter(g => g.subjectName === subject.name);
+                  const getGrade = (title: string) => {
+                    const g = subjectGrades.find(g => g.title.toUpperCase() === title);
+                    return g ? g.score : '';
+                  };
+                  return (
+                    <tr key={subject.id} className="border-b border-slate-300 hover:bg-slate-50">
+                      <td className="px-4 py-2 border border-slate-300 font-medium text-slate-900 uppercase">{subject.name}</td>
+                      {columns.map(col => (
+                        <td key={col} className="px-2 py-2 border border-slate-300 text-center">{getGrade(col)}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+                {/* Promedio row */}
+                <tr className="bg-slate-100 font-bold">
+                  <td className="px-4 py-2 border border-slate-300 uppercase">PROMEDIO</td>
+                  {columns.map(col => {
+                    const allScores = grades.filter(g => g.title.toUpperCase() === col).map(g => g.score);
+                    const avg = allScores.length > 0 ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1) : '';
+                    return <td key={col} className="px-2 py-2 border border-slate-300 text-center">{avg}</td>;
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      
+      {showChart && subjects.length === 0 && (
+        <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm text-center animate-in fade-in slide-in-from-top-4 duration-300">
+          <Table className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-slate-900">No hay materias</h3>
+          <p className="text-slate-500 mt-2">Añade algunas materias para ver tu cuadro de calificaciones.</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Forms */}

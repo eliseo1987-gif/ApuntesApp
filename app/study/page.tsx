@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import { getNotes } from '@/lib/store';
 
 export default function StudyToolsPage() {
-  const [selectedNote, setSelectedNote] = useState('');
+  const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [toolType, setToolType] = useState('summary');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
@@ -23,7 +23,7 @@ export default function StudyToolsPage() {
       const loadedNotes = getNotes();
       setNotes(loadedNotes);
       if (loadedNotes.length > 0) {
-        setSelectedNote(loadedNotes[0].id.toString());
+        setSelectedNotes([loadedNotes[0].id.toString()]);
       }
     };
     loadNotes();
@@ -39,14 +39,23 @@ export default function StudyToolsPage() {
     setShowResults(false);
     
     try {
-      const note = notes.find(n => n.id.toString() === selectedNote);
-      const noteTitle = note?.title || 'Apunte genérico';
-      const mockContent = note?.content || `Este es un apunte sobre ${noteTitle}. Contiene información detallada sobre los conceptos principales, fechas importantes y fórmulas relevantes discutidas en clase.`;
+      const selectedNotesData = notes.filter(n => selectedNotes.includes(n.id.toString()));
+      if (selectedNotesData.length === 0) {
+        setGeneratedContent('Por favor, selecciona al menos un apunte.');
+        setIsGenerating(false);
+        return;
+      }
+
+      const combinedContent = selectedNotesData.map(note => {
+        const title = note.title || 'Apunte genérico';
+        const content = note.content || `Este es un apunte sobre ${title}. Contiene información detallada sobre los conceptos principales, fechas importantes y fórmulas relevantes discutidas en clase.`;
+        return `--- Apunte: ${title} ---\n${content}\n`;
+      }).join('\n');
 
       const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
 
       if (toolType === 'quiz') {
-        const prompt = `Genera un cuestionario interactivo de 5 preguntas de opción múltiple basado en el siguiente apunte: "${mockContent}".`;
+        const prompt = `Genera un cuestionario interactivo de 5 preguntas de opción múltiple basado en los siguientes apuntes:\n\n${combinedContent}`;
         
         const response = await ai.models.generateContent({
           model: 'gemini-3-flash-preview',
@@ -84,9 +93,9 @@ export default function StudyToolsPage() {
       } else {
         let prompt = '';
         if (toolType === 'summary') {
-          prompt = `Crea un resumen estructurado y fácil de estudiar basado en el siguiente apunte: "${mockContent}". Usa viñetas, negritas para conceptos clave y un tono educativo.`;
+          prompt = `Crea un resumen estructurado y fácil de estudiar basado en los siguientes apuntes:\n\n${combinedContent}\n\nUsa viñetas, negritas para conceptos clave y un tono educativo.`;
         } else if (toolType === 'presentation') {
-          prompt = `Crea un esquema para una presentación de 5 diapositivas basado en el siguiente apunte: "${mockContent}". Para cada diapositiva, incluye un título y 3-4 puntos clave.`;
+          prompt = `Crea un esquema para una presentación de 5 diapositivas basado en los siguientes apuntes:\n\n${combinedContent}\n\nPara cada diapositiva, incluye un título y 3-4 puntos clave.`;
         }
 
         const response = await ai.models.generateContent({
@@ -142,16 +151,29 @@ export default function StudyToolsPage() {
         {/* Configuration Panel */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6 h-fit">
           <div>
-            <label className="block text-sm font-semibold text-slate-900 mb-2">1. Selecciona un apunte</label>
-            <select 
-              value={selectedNote}
-              onChange={(e) => setSelectedNote(e.target.value)}
-              className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm bg-slate-50"
-            >
+            <label className="block text-sm font-semibold text-slate-900 mb-2">1. Selecciona tus apuntes</label>
+            <div className="max-h-48 overflow-y-auto space-y-2 border border-slate-200 rounded-xl p-2 bg-slate-50">
               {notes.map(note => (
-                <option key={note.id} value={note.id}>{note.title}</option>
+                <label key={note.id} className="flex items-center gap-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedNotes.includes(note.id.toString())}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedNotes([...selectedNotes, note.id.toString()]);
+                      } else {
+                        setSelectedNotes(selectedNotes.filter(id => id !== note.id.toString()));
+                      }
+                    }}
+                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700">{note.title}</span>
+                </label>
               ))}
-            </select>
+              {notes.length === 0 && (
+                <p className="text-sm text-slate-500 text-center py-4">No hay apuntes disponibles.</p>
+              )}
+            </div>
           </div>
 
           <div>
@@ -191,7 +213,7 @@ export default function StudyToolsPage() {
 
           <button 
             onClick={handleGenerate}
-            disabled={isGenerating}
+            disabled={isGenerating || selectedNotes.length === 0}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isGenerating ? (
