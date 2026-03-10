@@ -1,13 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  distDir: 'app_build',
   reactStrictMode: true,
   typescript: {
     ignoreBuildErrors: true,
   },
-  output: 'export',
+  // SSR mode: necesario para Server Actions y Firebase App Hosting
   images: {
-    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',

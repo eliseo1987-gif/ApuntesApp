@@ -6,14 +6,15 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "public": "out",
-    "cleanUrls": true,
-    "trailingSlash": false,
+    "source": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
-    ]
+    ],
+    "frameworksBackend": {
+      "region": "us-central1"
+    }
   },
   "auth": {
     "providers": {
