@@ -7,6 +7,7 @@ import { ArrowLeft, Cloud, Loader2, Bold, Italic, Underline, List, Wand2, Downlo
 import { subscribeToNote, updateNote, Note } from '@/lib/store';
 import { generateStudyMaterial } from '@/lib/ai';
 import AIQuizBlock from '@/components/ai/AIQuizBlock';
+import MagicImportButton from '@/components/ai/MagicImportButton';
 
 function EditorContent() {
     const searchParams = useSearchParams();
@@ -21,6 +22,13 @@ function EditorContent() {
     const [showQuiz, setShowQuiz] = useState(false);
     const editorRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
+
+    const appendContent = (markdown: string) => {
+        const htmlContent = `<div style="margin-top:24px;padding:20px;background:#f8f7ff;border-left:4px solid #7c3aed;border-radius:12px;"><pre style="white-space:pre-wrap;font-family:inherit;font-size:0.95em;color:#374151;">${markdown}</pre></div>`;
+        const newContent = content + htmlContent;
+        setContent(newContent);
+        if (editorRef.current) editorRef.current.innerHTML = newContent;
+    };
 
     useEffect(() => {
         if (!id) {
@@ -156,6 +164,7 @@ function EditorContent() {
                         <BrainCircuit className="w-3.5 h-3.5" />
                         Quiz IA
                     </button>
+                    <MagicImportButton onExtracted={appendContent} />
                     <button
                         onClick={() => window.print()}
                         className="flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all shadow-sm active:scale-95 uppercase tracking-widest"
