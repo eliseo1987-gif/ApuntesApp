@@ -4,8 +4,10 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // SSR mode: necesario para Server Actions y Firebase App Hosting
+  output: 'export',
+  distDir: 'out',
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
@@ -18,3 +20,4 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
+
