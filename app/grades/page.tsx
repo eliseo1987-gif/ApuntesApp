@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, GraduationCap, Award, TrendingUp, Calendar as CalendarIcon, ChevronDown, ChevronUp, BarChart3, Table } from 'lucide-react';
-import { getSubjects, getGrades, addGrade, deleteGrade, getUpcomingTests, addUpcomingTest, deleteUpcomingTest } from '@/lib/store';
+import { getSubjects, subscribeToData, addGrade, deleteGrade, addUpcomingTest, deleteUpcomingTest } from '@/lib/store';
 
 export default function GradesPage() {
   const [subjects, setSubjects] = useState<any[]>([]);
@@ -24,24 +24,34 @@ export default function GradesPage() {
   const [showChart, setShowChart] = useState(false);
 
   useEffect(() => {
-    const loadData = () => {
-      const loadedSubjects = getSubjects();
+    const unsubscribeSubjects = subscribeToData('subjects', (loadedSubjects) => {
       setSubjects(loadedSubjects);
       if (loadedSubjects.length > 0) {
-        setNewSubject(loadedSubjects[0].name);
-        setTestSubject(loadedSubjects[0].name);
+        setNewSubject(prev => prev || loadedSubjects[0].name);
+        setTestSubject(prev => prev || loadedSubjects[0].name);
       }
-      setGrades(getGrades());
-      setUpcomingTests(getUpcomingTests());
+    }) as () => void;
+
+    const unsubscribeGrades = subscribeToData('grades', (loadedGrades) => {
+      setGrades(loadedGrades);
+    }) as () => void;
+
+    const unsubscribeTests = subscribeToData('upcoming_tests', (loadedTests) => {
+      setUpcomingTests(loadedTests);
+    }) as () => void;
+
+    return () => {
+      unsubscribeSubjects();
+      unsubscribeGrades();
+      unsubscribeTests();
     };
-    loadData();
   }, []);
 
-  const handleAddGrade = (e: React.FormEvent) => {
+  const handleAddGrade = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubject || !newTitle || !newScore || !newMaxScore) return;
 
-    const grade = addGrade({
+    await addGrade({
       subjectName: newSubject,
       title: newTitle,
       score: parseFloat(newScore),
@@ -49,36 +59,30 @@ export default function GradesPage() {
       date: new Date().toISOString().split('T')[0]
     });
 
-    setGrades([grade, ...grades]);
     setNewTitle('');
     setNewScore('');
   };
 
-  const handleDeleteGrade = (id: string) => {
-    deleteGrade(id);
-    setGrades(grades.filter(g => g.id !== id));
+  const handleDeleteGrade = async (id: string) => {
+    await deleteGrade(id);
   };
 
-  const handleAddTest = (e: React.FormEvent) => {
+  const handleAddTest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!testSubject || !testTitle || !testDate) return;
 
-    const newTest = addUpcomingTest({
+    await addUpcomingTest({
       subjectName: testSubject,
       title: testTitle,
       date: testDate
     });
 
-    // Re-sort the local state to match the store
-    const updatedTests = [...upcomingTests, newTest].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    setUpcomingTests(updatedTests);
     setTestTitle('');
     setTestDate('');
   };
 
-  const handleDeleteTest = (id: string) => {
-    deleteUpcomingTest(id);
-    setUpcomingTests(upcomingTests.filter(t => t.id !== id));
+  const handleDeleteTest = async (id: string) => {
+    await deleteUpcomingTest(id);
   };
 
   const gradesBySubject = subjects.map(subject => {
@@ -114,7 +118,7 @@ export default function GradesPage() {
     return '#94a3b8'; // default slate
   };
 
-  const columns = ['F1', '1P', 'F2', '2P', 'F3', '3P', 'FT', 'EF', 'PGE', 'EXF', 'TSF', 'PFE'];
+  const columns = Array.from(new Set(grades.map(g => g.title.toUpperCase())));
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -123,7 +127,7 @@ export default function GradesPage() {
           <h1 className="text-4xl font-bold font-display text-slate-900 tracking-tight">Calificaciones</h1>
           <p className="text-slate-500 mt-2 text-lg">Registra tus notas y haz seguimiento de tu progreso.</p>
         </div>
-        <button 
+        <button
           onClick={() => setShowChart(!showChart)}
           className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all shadow-sm"
         >
@@ -179,7 +183,7 @@ export default function GradesPage() {
           </div>
         </div>
       )}
-      
+
       {showChart && subjects.length === 0 && (
         <div className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm text-center animate-in fade-in slide-in-from-top-4 duration-300">
           <Table className="w-12 h-12 text-slate-300 mx-auto mb-4" />
@@ -203,7 +207,7 @@ export default function GradesPage() {
             <form onSubmit={handleAddGrade} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-900 mb-2">Materia</label>
-                <select 
+                <select
                   value={newSubject}
                   onChange={(e) => setNewSubject(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm bg-white"
@@ -218,14 +222,14 @@ export default function GradesPage() {
                   )}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-semibold text-slate-900 mb-2">Título (ej. Parcial 1)</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Examen Parcial" 
+                  placeholder="Examen Parcial"
                   className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
                 />
               </div>
@@ -233,29 +237,29 @@ export default function GradesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-900 mb-2">Nota</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     step="0.1"
                     value={newScore}
                     onChange={(e) => setNewScore(e.target.value)}
-                    placeholder="8.5" 
+                    placeholder="8.5"
                     className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-900 mb-2">Nota Máxima</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     step="0.1"
                     value={newMaxScore}
                     onChange={(e) => setNewMaxScore(e.target.value)}
-                    placeholder="10" 
+                    placeholder="10"
                     className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
                   />
                 </div>
               </div>
 
-              <button 
+              <button
                 type="submit"
                 disabled={!newSubject || !newTitle || !newScore || !newMaxScore || subjects.length === 0}
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-50 mt-4"
@@ -278,7 +282,7 @@ export default function GradesPage() {
             <form onSubmit={handleAddTest} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-900 mb-2">Materia</label>
-                <select 
+                <select
                   value={testSubject}
                   onChange={(e) => setTestSubject(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm bg-white"
@@ -293,29 +297,29 @@ export default function GradesPage() {
                   )}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-semibold text-slate-900 mb-2">Título de la Prueba</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={testTitle}
                   onChange={(e) => setTestTitle(e.target.value)}
-                  placeholder="Examen Final" 
+                  placeholder="Examen Final"
                   className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-slate-900 mb-2">Fecha</label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   value={testDate}
                   onChange={(e) => setTestDate(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm"
                 />
               </div>
 
-              <button 
+              <button
                 type="submit"
                 disabled={!testSubject || !testTitle || !testDate || subjects.length === 0}
                 className="w-full bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-50 mt-4"
@@ -338,18 +342,18 @@ export default function GradesPage() {
                 </div>
                 <h3 className="text-xl font-bold text-slate-900">Próximas Evaluaciones</h3>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {upcomingTests.map(test => {
                   const subject = subjects.find(s => s.name === test.subjectName);
                   const colorClass = subject ? subject.color : 'bg-slate-100 text-slate-600';
-                  
+
                   // Format date nicely
                   const dateObj = new Date(test.date);
                   // Add timezone offset to prevent date shifting
                   dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
                   const formattedDate = dateObj.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
-                  
+
                   // Calculate days left
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
@@ -359,7 +363,7 @@ export default function GradesPage() {
 
                   return (
                     <div key={test.id} className="flex flex-col p-4 rounded-xl border border-slate-100 bg-slate-50 relative group">
-                      <button 
+                      <button
                         onClick={() => handleDeleteTest(test.id)}
                         className="absolute top-3 right-3 text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
                         title="Eliminar prueba"
@@ -433,7 +437,7 @@ export default function GradesPage() {
                               <p className="text-lg font-bold text-slate-900">{grade.score} <span className="text-sm font-medium text-slate-400">/ {grade.maxScore}</span></p>
                               <p className="text-xs font-medium text-slate-500">{((grade.score / grade.maxScore) * 100).toFixed(1)}%</p>
                             </div>
-                            <button 
+                            <button
                               onClick={() => handleDeleteGrade(grade.id)}
                               className="text-slate-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors"
                               title="Eliminar calificación"

@@ -3,11 +3,12 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, FileText, Mic, Video, UploadCloud, Save, Loader2, Bold, Italic, Underline, List, Play, Square, Circle, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, FileText, Mic, Video, UploadCloud, Save, Loader2, Bold, Italic, Underline, List, Play, Square, Circle, Image as ImageIcon, Wand2 } from 'lucide-react';
 import { addNote, getSubjects } from '@/lib/store';
+import { processAudioToText } from '@/lib/ai';
 
 export default function NewNotePage() {
-  const [noteType, setNoteType] = useState('document');
+  const [noteType, setNoteType] = useState<'document' | 'audio' | 'video' | 'image'>('document');
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -15,17 +16,18 @@ export default function NewNotePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [subjects, setSubjects] = useState<any[]>([]);
-  
+
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+
   const editorRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   const router = useRouter();
 
   useEffect(() => {
@@ -61,7 +63,7 @@ export default function NewNotePage() {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
-        
+
         // Create a File object from the Blob
         const file = new File([blob], `grabacion-${new Date().getTime()}.webm`, { type: 'audio/webm' });
         setSelectedFile(file);
@@ -70,7 +72,7 @@ export default function NewNotePage() {
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
-      
+
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
@@ -108,10 +110,10 @@ export default function NewNotePage() {
 
   const handleSave = async () => {
     setIsSaving(true);
-    
+
     const selectedSubject = subjects.find(s => s.name === subject);
     const color = selectedSubject ? selectedSubject.color : (noteType === 'document' ? 'bg-blue-100 text-blue-600' : noteType === 'audio' ? 'bg-orange-100 text-orange-600' : noteType === 'video' ? 'bg-purple-100 text-purple-600' : 'bg-emerald-100 text-emerald-600');
-    
+
     addNote({
       title,
       subject,
@@ -125,6 +127,45 @@ export default function NewNotePage() {
 
     setIsSaving(false);
     router.push('/notes');
+  };
+
+  const handleProcessAudioAI = async () => {
+    if (!selectedFile) return;
+    setIsAiProcessing(true);
+
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(selectedFile);
+
+      reader.onload = async () => {
+        try {
+          const base64String = (reader.result as string).split(',')[1];
+          const mimeType = selectedFile.type || 'audio/webm';
+
+          const transcriptHtml = await processAudioToText(base64String, mimeType);
+
+          setNoteType('document');
+          setContent(transcriptHtml);
+
+          if (editorRef.current) {
+            editorRef.current.innerHTML = transcriptHtml;
+          }
+        } catch (error) {
+          console.error("AI Error:", error);
+          alert("Hubo un error al procesar el audio con IA. Asegúrate de que el audio no sea muy largo y esté funcionando tu API Key.");
+        } finally {
+          setIsAiProcessing(false);
+        }
+      };
+
+      reader.onerror = () => {
+        setIsAiProcessing(false);
+        alert("Error al intentar leer la grabación/archivo de audio.");
+      };
+    } catch (err) {
+      setIsAiProcessing(false);
+      console.error(err);
+    }
   };
 
   return (
@@ -144,28 +185,28 @@ export default function NewNotePage() {
         <div>
           <label className="block text-sm font-semibold text-slate-900 mb-4">Tipo de Apunte</label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <button 
+            <button
               onClick={() => { setNoteType('document'); setSelectedFile(null); }}
               className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${noteType === 'document' ? 'border-indigo-600 bg-indigo-50/30 text-indigo-700' : 'border-slate-100 hover:border-indigo-200 text-slate-600'}`}
             >
               <FileText className={`w-8 h-8 ${noteType === 'document' ? 'text-indigo-600' : 'text-slate-400'}`} />
               <span className="font-medium">Documento</span>
             </button>
-            <button 
+            <button
               onClick={() => { setNoteType('audio'); setSelectedFile(null); setAudioUrl(null); }}
               className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${noteType === 'audio' ? 'border-orange-600 bg-orange-50/30 text-orange-700' : 'border-slate-100 hover:border-orange-200 text-slate-600'}`}
             >
               <Mic className={`w-8 h-8 ${noteType === 'audio' ? 'text-orange-600' : 'text-slate-400'}`} />
               <span className="font-medium">Audio</span>
             </button>
-            <button 
+            <button
               onClick={() => { setNoteType('video'); setSelectedFile(null); }}
               className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${noteType === 'video' ? 'border-purple-600 bg-purple-50/30 text-purple-700' : 'border-slate-100 hover:border-purple-200 text-slate-600'}`}
             >
               <Video className={`w-8 h-8 ${noteType === 'video' ? 'text-purple-600' : 'text-slate-400'}`} />
               <span className="font-medium">Video</span>
             </button>
-            <button 
+            <button
               onClick={() => { setNoteType('image'); setSelectedFile(null); }}
               className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-3 transition-all ${noteType === 'image' ? 'border-emerald-600 bg-emerald-50/30 text-emerald-700' : 'border-slate-100 hover:border-emerald-200 text-slate-600'}`}
             >
@@ -178,11 +219,11 @@ export default function NewNotePage() {
         {/* Title Input */}
         <div>
           <label className="block text-sm font-semibold text-slate-900 mb-2">Título del Apunte</label>
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ej: Revolución Francesa" 
+            placeholder="Ej: Revolución Francesa"
             className="w-full p-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-lg font-medium"
           />
         </div>
@@ -191,11 +232,11 @@ export default function NewNotePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-semibold text-slate-900 mb-2">Materia</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Ej: Historia Contemporánea" 
+              placeholder="Ej: Historia Contemporánea"
               list="materias-list"
               className="w-full p-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
             />
@@ -207,8 +248,8 @@ export default function NewNotePage() {
           </div>
           <div>
             <label className="block text-sm font-semibold text-slate-900 mb-2">Fecha</label>
-            <input 
-              type="date" 
+            <input
+              type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="w-full p-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
@@ -236,7 +277,7 @@ export default function NewNotePage() {
                   <List className="w-4 h-4" />
                 </button>
               </div>
-              <div 
+              <div
                 ref={editorRef}
                 contentEditable
                 onInput={(e) => setContent(e.currentTarget.innerHTML)}
@@ -248,7 +289,7 @@ export default function NewNotePage() {
         ) : noteType === 'audio' ? (
           <div className="space-y-6">
             <label className="block text-sm font-semibold text-slate-900">Audio del Apunte</label>
-            
+
             {/* Recording Section */}
             <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 flex flex-col items-center justify-center space-y-4">
               {audioUrl ? (
@@ -265,27 +306,41 @@ export default function NewNotePage() {
                     </div>
                     <audio src={audioUrl} controls className="h-10" />
                   </div>
-                  <button 
+
+                  <button
+                    onClick={handleProcessAudioAI}
+                    disabled={isAiProcessing}
+                    className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-200 disabled:opacity-50"
+                  >
+                    {isAiProcessing ? (
+                      <><Loader2 className="w-5 h-5 animate-spin" /> Procesando con IA (puede tardar un minuto)...</>
+                    ) : (
+                      <><Wand2 className="w-5 h-5" /> ✨ Transcribir y Resumir con IA ✨</>
+                    )}
+                  </button>
+
+                  <button
                     onClick={() => {
                       setAudioUrl(null);
                       setSelectedFile(null);
                       setRecordingTime(0);
                     }}
-                    className="text-sm text-red-500 hover:text-red-600 font-medium w-full text-center"
+                    className="text-sm text-red-500 hover:text-red-600 font-medium w-full text-center py-2"
                   >
                     Descartar y grabar de nuevo
                   </button>
                 </div>
+
               ) : (
                 <>
                   <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-orange-100 text-orange-600'}`}>
                     <Mic className={`w-8 h-8 ${isRecording ? 'animate-bounce' : ''}`} />
                   </div>
-                  
+
                   {isRecording ? (
                     <div className="text-center space-y-4">
                       <p className="text-2xl font-bold text-slate-900 font-mono">{formatTime(recordingTime)}</p>
-                      <button 
+                      <button
                         onClick={stopRecording}
                         className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-full font-medium flex items-center gap-2 transition-all shadow-sm mx-auto"
                       >
@@ -296,7 +351,7 @@ export default function NewNotePage() {
                     <div className="text-center space-y-2">
                       <h3 className="text-lg font-semibold text-slate-900">Grabar nota de voz</h3>
                       <p className="text-slate-500 text-sm mb-4">Usa tu micrófono para grabar la clase</p>
-                      <button 
+                      <button
                         onClick={startRecording}
                         className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2.5 rounded-full font-medium flex items-center gap-2 transition-all shadow-sm mx-auto"
                       >
@@ -315,10 +370,10 @@ export default function NewNotePage() {
             </div>
 
             {/* Upload Section */}
-            <input 
-              type="file" 
-              id="file-upload" 
-              className="hidden" 
+            <input
+              type="file"
+              id="file-upload"
+              className="hidden"
               accept="audio/mp3,audio/wav,audio/m4a,audio/*"
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
@@ -327,7 +382,7 @@ export default function NewNotePage() {
                 }
               }}
             />
-            <label 
+            <label
               htmlFor="file-upload"
               className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center transition-colors cursor-pointer ${selectedFile && !audioUrl ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-200 hover:bg-slate-50'}`}
             >
@@ -337,9 +392,29 @@ export default function NewNotePage() {
                     <FileText className="w-6 h-6" />
                   </div>
                   <h3 className="text-md font-semibold text-slate-900 mb-1">{selectedFile.name}</h3>
-                  <p className="text-emerald-600 font-medium text-xs">
+                  <p className="text-emerald-600 font-medium text-xs mb-4">
                     Archivo seleccionado ({(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)
                   </p>
+
+                  {/* AI Upload Process Button */}
+                  <div className="w-full max-w-sm mx-auto z-10" onClick={e => e.preventDefault() /* prevent label click */}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        handleProcessAudioAI();
+                      }}
+                      disabled={isAiProcessing}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-md shadow-indigo-200 disabled:opacity-50 mt-2"
+                    >
+                      {isAiProcessing ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Analizando Audio...</>
+                      ) : (
+                        <><Wand2 className="w-4 h-4" /> Procesar a Texto con IA</>
+                      )}
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
@@ -355,10 +430,10 @@ export default function NewNotePage() {
         ) : noteType === 'video' ? (
           <div>
             <label className="block text-sm font-semibold text-slate-900 mb-2">Sube tu archivo de video</label>
-            <input 
-              type="file" 
-              id="file-upload" 
-              className="hidden" 
+            <input
+              type="file"
+              id="file-upload"
+              className="hidden"
               accept="video/mp4,video/quicktime,video/x-msvideo,video/*"
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
@@ -366,7 +441,7 @@ export default function NewNotePage() {
                 }
               }}
             />
-            <label 
+            <label
               htmlFor="file-upload"
               className={`border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center text-center transition-colors cursor-pointer ${selectedFile ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-200 hover:bg-slate-50'}`}
             >
@@ -395,10 +470,10 @@ export default function NewNotePage() {
         ) : (
           <div>
             <label className="block text-sm font-semibold text-slate-900 mb-2">Sube tu fotografía</label>
-            <input 
-              type="file" 
-              id="file-upload" 
-              className="hidden" 
+            <input
+              type="file"
+              id="file-upload"
+              className="hidden"
               accept="image/jpeg,image/png,image/webp,image/*"
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
@@ -406,7 +481,7 @@ export default function NewNotePage() {
                 }
               }}
             />
-            <label 
+            <label
               htmlFor="file-upload"
               className={`border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center text-center transition-colors cursor-pointer ${selectedFile ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-200 hover:bg-slate-50'}`}
             >
@@ -439,7 +514,7 @@ export default function NewNotePage() {
           <Link href="/notes" className="px-6 py-3 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors">
             Cancelar
           </Link>
-          <button 
+          <button
             onClick={handleSave}
             disabled={!title || !subject || !date || (noteType === 'document' && !content) || (noteType !== 'document' && !selectedFile) || isSaving}
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"

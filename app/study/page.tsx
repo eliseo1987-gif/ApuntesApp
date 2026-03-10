@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { Sparkles, FileText, Presentation, BookOpen, Loader2, CheckCircle2, ChevronRight, RotateCcw } from 'lucide-react';
-import { GoogleGenAI, Type } from '@google/genai';
+import { generateStudyMaterial } from '@/lib/ai';
 import ReactMarkdown from 'react-markdown';
-import { getNotes } from '@/lib/store';
+import { subscribeToNotes } from '@/lib/store';
 
 export default function StudyToolsPage() {
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
@@ -19,15 +19,14 @@ export default function StudyToolsPage() {
   const [notes, setNotes] = useState<any[]>([]);
 
   useEffect(() => {
-    const loadNotes = () => {
-      const loadedNotes = getNotes();
+    const unsubscribe = subscribeToNotes((loadedNotes) => {
       setNotes(loadedNotes);
-      if (loadedNotes.length > 0) {
+      if (loadedNotes.length > 0 && selectedNotes.length === 0) {
         setSelectedNotes([loadedNotes[0].id.toString()]);
       }
-    };
-    loadNotes();
-  }, []);
+    }) as () => void;
+    return () => unsubscribe();
+  }, [selectedNotes.length]);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -37,7 +36,7 @@ export default function StudyToolsPage() {
     setSelectedAnswer(null);
     setScore(0);
     setShowResults(false);
-    
+
     try {
       const selectedNotesData = notes.filter(n => selectedNotes.includes(n.id.toString()));
       if (selectedNotesData.length === 0) {
@@ -48,66 +47,21 @@ export default function StudyToolsPage() {
 
       const combinedContent = selectedNotesData.map(note => {
         const title = note.title || 'Apunte genérico';
-        const content = note.content || `Este es un apunte sobre ${title}. Contiene información detallada sobre los conceptos principales, fechas importantes y fórmulas relevantes discutidas en clase.`;
+        const content = note.content || `Este es un apunte sobre ${title}.`;
         return `--- Apunte: ${title} ---\n${content}\n`;
       }).join('\n');
 
-      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+      const responseText = await generateStudyMaterial(toolType as any, combinedContent);
 
       if (toolType === 'quiz') {
-        const prompt = `Genera un cuestionario interactivo de 5 preguntas de opción múltiple basado en los siguientes apuntes:\n\n${combinedContent}`;
-        
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                questions: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      question: { type: Type.STRING, description: "La pregunta" },
-                      options: { 
-                        type: Type.ARRAY, 
-                        items: { type: Type.STRING },
-                        description: "4 opciones de respuesta"
-                      },
-                      correctAnswerIndex: { type: Type.INTEGER, description: "El índice (0-3) de la respuesta correcta en el array de opciones" },
-                      explanation: { type: Type.STRING, description: "Breve explicación de por qué es la respuesta correcta" }
-                    },
-                    required: ["question", "options", "correctAnswerIndex", "explanation"]
-                  }
-                }
-              },
-              required: ["questions"]
-            }
-          }
-        });
-
-        const data = JSON.parse(response.text || '{}');
+        const data = JSON.parse(responseText || '{}');
         setQuizData(data);
       } else {
-        let prompt = '';
-        if (toolType === 'summary') {
-          prompt = `Crea un resumen estructurado y fácil de estudiar basado en los siguientes apuntes:\n\n${combinedContent}\n\nUsa viñetas, negritas para conceptos clave y un tono educativo.`;
-        } else if (toolType === 'presentation') {
-          prompt = `Crea un esquema para una presentación de 5 diapositivas basado en los siguientes apuntes:\n\n${combinedContent}\n\nPara cada diapositiva, incluye un título y 3-4 puntos clave.`;
-        }
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: prompt,
-        });
-
-        setGeneratedContent(response.text || 'No se pudo generar el contenido.');
+        setGeneratedContent(responseText || 'No se pudo generar el contenido.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating content:', error);
-      setGeneratedContent('Ocurrió un error al generar el contenido. Por favor, intenta de nuevo.');
+      setGeneratedContent(`Error: ${error.message || 'Ocurrió un fallo técnico.'}`);
     } finally {
       setIsGenerating(false);
     }
@@ -116,7 +70,7 @@ export default function StudyToolsPage() {
   const handleAnswerClick = (index: number) => {
     if (selectedAnswer !== null) return; // Already answered
     setSelectedAnswer(index);
-    
+
     if (index === quizData.questions[currentQuestionIndex].correctAnswerIndex) {
       setScore(score + 1);
     }
@@ -155,8 +109,8 @@ export default function StudyToolsPage() {
             <div className="max-h-48 overflow-y-auto space-y-2 border border-slate-200 rounded-xl p-2 bg-slate-50">
               {notes.map(note => (
                 <label key={note.id} className="flex items-center gap-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={selectedNotes.includes(note.id.toString())}
                     onChange={(e) => {
                       if (e.target.checked) {
@@ -188,7 +142,7 @@ export default function StudyToolsPage() {
                   <p className="text-xs text-slate-500 mt-1">Extrae los puntos clave y organizalos para un repaso rápido.</p>
                 </div>
               </label>
-              
+
               <label className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${toolType === 'presentation' ? 'border-purple-500 bg-purple-50/50' : 'border-slate-200 hover:border-purple-300'}`}>
                 <input type="radio" name="tool" value="presentation" checked={toolType === 'presentation'} onChange={() => setToolType('presentation')} className="mt-1" />
                 <div>
@@ -211,7 +165,7 @@ export default function StudyToolsPage() {
             </div>
           </div>
 
-          <button 
+          <button
             onClick={handleGenerate}
             disabled={isGenerating || selectedNotes.length === 0}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
@@ -243,7 +197,7 @@ export default function StudyToolsPage() {
                 </span>
               )}
             </div>
-            
+
             <div className="p-8 flex-1 overflow-y-auto">
               {isGenerating ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-4">
@@ -265,7 +219,7 @@ export default function StudyToolsPage() {
                         Tu puntuación: <span className="font-bold text-indigo-600">{score}</span> de {quizData.questions.length}
                       </p>
                       <div className="pt-8">
-                        <button 
+                        <button
                           onClick={resetQuiz}
                           className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 mx-auto transition-all shadow-sm"
                         >
@@ -280,7 +234,7 @@ export default function StudyToolsPage() {
                         <span>Pregunta {currentQuestionIndex + 1} de {quizData.questions.length}</span>
                         <span>Puntuación: {score}</span>
                       </div>
-                      
+
                       <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                         <h3 className="text-xl font-bold text-slate-900 leading-relaxed">
                           {quizData.questions[currentQuestionIndex].question}
@@ -292,9 +246,9 @@ export default function StudyToolsPage() {
                           const isSelected = selectedAnswer === index;
                           const isCorrect = index === quizData.questions[currentQuestionIndex].correctAnswerIndex;
                           const showCorrectness = selectedAnswer !== null;
-                          
+
                           let buttonClass = "w-full text-left p-4 rounded-xl border-2 transition-all font-medium ";
-                          
+
                           if (!showCorrectness) {
                             buttonClass += "border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 bg-white text-slate-700";
                           } else if (isCorrect) {

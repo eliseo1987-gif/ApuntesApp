@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, FileText, Mic, Video, Clock, Calendar as CalendarIcon, Image as ImageIcon } from 'lucide-react';
-import { getNotes, getSchedules, getSubjects, getUpcomingTests } from '@/lib/store';
+import { subscribeToNotes, subscribeToData } from '@/lib/store';
 
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -14,13 +14,28 @@ export default function CalendarPage() {
   const [upcomingTests, setUpcomingTests] = useState<any[]>([]);
 
   useEffect(() => {
-    const loadData = () => {
-      setNotes(getNotes());
-      setSchedules(getSchedules());
-      setSubjects(getSubjects());
-      setUpcomingTests(getUpcomingTests());
+    const unsubNotes = subscribeToNotes((loadedNotes) => {
+      setNotes(loadedNotes);
+    }) as () => void;
+
+    const unsubSchedules = subscribeToData('schedules', (loadedSchedules) => {
+      setSchedules(loadedSchedules);
+    }) as () => void;
+
+    const unsubSubjects = subscribeToData('subjects', (loadedSubjects) => {
+      setSubjects(loadedSubjects);
+    }) as () => void;
+
+    const unsubTests = subscribeToData('upcoming_tests', (loadedTests) => {
+      setUpcomingTests(loadedTests);
+    }) as () => void;
+
+    return () => {
+      unsubNotes();
+      unsubSchedules();
+      unsubSubjects();
+      unsubTests();
     };
-    loadData();
   }, []);
 
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
@@ -65,18 +80,16 @@ export default function CalendarPage() {
       days.push(
         <div
           key={day.toString()}
-          className={`min-h-[120px] p-2 border border-slate-100 bg-white transition-colors ${
-            !isSameMonth(day, monthStart)
+          className={`min-h-[120px] p-2 border border-slate-100 bg-white transition-colors ${!isSameMonth(day, monthStart)
               ? "text-slate-300 bg-slate-50/50"
               : isSameDay(day, new Date())
-              ? "bg-indigo-50/30"
-              : ""
-          }`}
+                ? "bg-indigo-50/30"
+                : ""
+            }`}
         >
           <div className="flex justify-between items-start">
-            <span className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full ${
-              isSameDay(day, new Date()) ? "bg-indigo-600 text-white" : "text-slate-700"
-            }`}>
+            <span className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full ${isSameDay(day, new Date()) ? "bg-indigo-600 text-white" : "text-slate-700"
+              }`}>
               {formattedDate}
             </span>
           </div>

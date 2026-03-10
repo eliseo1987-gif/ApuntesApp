@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { FileText, Mic, Video, Plus, ArrowRight, Clock, Calendar as CalendarIcon, Sparkles, TrendingUp, Trash2, X, Table } from 'lucide-react';
-import { getNotes, getGrades, getSubjects, getSchedules, addSchedule, deleteSchedule } from '@/lib/store';
+import { getNotes, getGrades, getSubjects, getSchedules, addSchedule, deleteSchedule, subscribeToNotes, subscribeToData } from '@/lib/store';
 
 export default function Dashboard() {
   const [recentNotes, setRecentNotes] = useState<any[]>([]);
@@ -11,7 +11,7 @@ export default function Dashboard() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
-  
+
   // Schedule form state
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [newScheduleSubject, setNewScheduleSubject] = useState('');
@@ -20,36 +20,49 @@ export default function Dashboard() {
   const [newScheduleEnd, setNewScheduleEnd] = useState('10:00');
 
   useEffect(() => {
-    const loadData = () => {
-      const notes = getNotes();
-      setTotalNotes(notes.length);
-      setRecentNotes(notes.slice(0, 3));
+    // Real-time Notes
+    const unsubscribeNotes = subscribeToNotes((loadedNotes) => {
+      setTotalNotes(loadedNotes.length);
+      setRecentNotes(loadedNotes.slice(0, 3));
+    }) as () => void;
 
-      const grades = getGrades();
-      setGrades(grades);
-      const loadedSubjects = getSubjects();
+    // Real-time Subjects
+    const unsubscribeSubjects = subscribeToData('subjects', (loadedSubjects) => {
       setSubjects(loadedSubjects);
       if (loadedSubjects.length > 0) {
-        setNewScheduleSubject(loadedSubjects[0].name);
+        setNewScheduleSubject(prev => prev || loadedSubjects[0].name);
       }
-      
-      const loadedSchedules = getSchedules();
+    }) as () => void;
+
+    // Real-time Schedules
+    const unsubscribeSchedules = subscribeToData('schedules', (loadedSchedules) => {
       setSchedules(loadedSchedules);
+    }) as () => void;
+
+    // Real-time Grades
+    const unsubscribeGrades = subscribeToData('grades', (loadedGrades) => {
+      setGrades(loadedGrades);
+    }) as () => void;
+
+    return () => {
+      unsubscribeNotes();
+      unsubscribeSubjects();
+      unsubscribeSchedules();
+      unsubscribeGrades();
     };
-    loadData();
   }, []);
 
   const handleAddSchedule = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newScheduleSubject || !newScheduleDay || !newScheduleStart || !newScheduleEnd) return;
-    
+
     const schedule = addSchedule({
       subjectName: newScheduleSubject,
       dayOfWeek: parseInt(newScheduleDay),
       startTime: newScheduleStart,
       endTime: newScheduleEnd
     });
-    
+
     setSchedules([...schedules, schedule]);
     setShowScheduleForm(false);
   };
@@ -72,16 +85,16 @@ export default function Dashboard() {
   const getScheduleStyle = (schedule: any) => {
     const startParts = schedule.startTime.split(':');
     const endParts = schedule.endTime.split(':');
-    
+
     const startHour = parseInt(startParts[0]) + parseInt(startParts[1]) / 60;
     const endHour = parseInt(endParts[0]) + parseInt(endParts[1]) / 60;
-    
+
     const top = (startHour - 8) * 60; // 60px per hour, starting at 8:00
     const height = (endHour - startHour) * 60;
-    
+
     const subject = subjects.find(s => s.name === schedule.subjectName);
     const colorClass = subject ? subject.color : 'bg-slate-100 text-slate-600';
-    
+
     return { top: `${top}px`, height: `${height}px`, colorClass };
   };
 
@@ -203,7 +216,7 @@ export default function Dashboard() {
                   <p className="text-xs sm:text-sm text-slate-500">Organiza tus clases por hora</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowScheduleForm(!showScheduleForm)}
                 className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-xl font-medium flex items-center justify-center gap-2 transition-all shadow-sm text-sm w-full sm:w-auto"
               >
@@ -217,7 +230,7 @@ export default function Dashboard() {
                 <form onSubmit={handleAddSchedule} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
                   <div className="sm:col-span-2 md:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Materia</label>
-                    <select 
+                    <select
                       value={newScheduleSubject}
                       onChange={(e) => setNewScheduleSubject(e.target.value)}
                       className="w-full p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm bg-white"
@@ -234,7 +247,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Día</label>
-                    <select 
+                    <select
                       value={newScheduleDay}
                       onChange={(e) => setNewScheduleDay(e.target.value)}
                       className="w-full p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm bg-white"
@@ -247,15 +260,15 @@ export default function Dashboard() {
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Hora</label>
                     <div className="flex items-center gap-1">
-                      <input 
-                        type="time" 
+                      <input
+                        type="time"
                         value={newScheduleStart}
                         onChange={(e) => setNewScheduleStart(e.target.value)}
                         className="w-full p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs"
                       />
                       <span className="text-slate-400">-</span>
-                      <input 
-                        type="time" 
+                      <input
+                        type="time"
                         value={newScheduleEnd}
                         onChange={(e) => setNewScheduleEnd(e.target.value)}
                         className="w-full p-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs"
@@ -263,7 +276,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div>
-                    <button 
+                    <button
                       type="submit"
                       disabled={!newScheduleSubject || subjects.length === 0}
                       className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 rounded-lg font-medium transition-all shadow-sm disabled:opacity-50 text-sm"
@@ -284,7 +297,7 @@ export default function Dashboard() {
                     <div key={day.id} className="text-sm font-bold text-slate-700 text-center">{day.name}</div>
                   ))}
                 </div>
-                
+
                 {/* Schedule Grid Body */}
                 <div className="relative" style={{ height: `${12 * 60}px` }}> {/* 12 hours * 60px */}
                   {/* Background grid lines */}
@@ -302,7 +315,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
-                  
+
                   {/* Schedule Items */}
                   <div className="absolute top-0 left-0 w-full h-full flex">
                     <div className="w-1/6"></div> {/* Time column spacer */}
@@ -312,12 +325,12 @@ export default function Dashboard() {
                           {schedules.filter(s => s.dayOfWeek === day.id).map(schedule => {
                             const style = getScheduleStyle(schedule);
                             return (
-                              <div 
+                              <div
                                 key={schedule.id}
                                 className={`absolute left-1 right-1 rounded-lg p-2 border border-white/20 shadow-sm overflow-hidden group ${style.colorClass}`}
                                 style={{ top: style.top, height: style.height }}
                               >
-                                <button 
+                                <button
                                   onClick={() => handleDeleteSchedule(schedule.id)}
                                   className="absolute top-1 right-1 p-1 bg-white/50 hover:bg-white rounded-md text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
@@ -345,7 +358,7 @@ export default function Dashboard() {
                 Ver todos <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
-            
+
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
               <div className="divide-y divide-slate-100">
                 {recentNotes.map((note) => (
@@ -372,7 +385,7 @@ export default function Dashboard() {
         {/* AI Study Tools */}
         <div className="space-y-6">
           <h2 className="text-xl font-bold font-display text-slate-900">Herramientas IA</h2>
-          
+
           <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-md relative overflow-hidden">
             <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full blur-2xl"></div>
             <Sparkles className="w-8 h-8 mb-4 text-indigo-100" />

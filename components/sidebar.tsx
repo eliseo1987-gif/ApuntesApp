@@ -23,11 +23,12 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const [prevPathname, setPrevPathname] = useState(pathname);
 
-  // Close sidebar on route change on mobile
-  useEffect(() => {
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
     setIsOpen(false);
-  }, [pathname]);
+  }
 
   return (
     <>
@@ -46,7 +47,7 @@ export function Sidebar() {
 
       {/* Overlay */}
       {isOpen && (
-        <div 
+        <div
           className="lg:hidden fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40"
           onClick={() => setIsOpen(false)}
         />
@@ -69,36 +70,41 @@ export function Sidebar() {
           </button>
         </div>
         <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                "flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors",
-                isActive 
-                  ? "bg-indigo-50 text-indigo-600 font-semibold" 
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium"
-              )}
-            >
-              <item.icon className={cn("w-5 h-5", isActive ? "text-indigo-600" : "text-gray-400")} />
-              <span>{item.name}</span>
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="p-4 border-t">
-        <div className="flex items-center space-x-3 px-4 py-2">
-          <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold">
-            E
+          {navItems.map((item) => {
+            const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={cn(
+                  "flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors",
+                  isActive
+                    ? "bg-indigo-50 text-indigo-600 font-semibold"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium"
+                )}
+              >
+                <item.icon className={cn("w-5 h-5", isActive ? "text-indigo-600" : "text-gray-400")} />
+                <span>{item.name}</span>
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="p-4 border-t space-y-3">
+          <div className="flex items-center gap-2 px-3 py-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 rounded-lg animate-in fade-in duration-500">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span>Nube Sincronizada</span>
+            <Sparkles className="w-3 h-3 ml-auto opacity-50" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-900">Estudiante</p>
-            <p className="text-xs text-gray-500">Plan Premium</p>
+          <div className="flex items-center space-x-3 px-3 py-1">
+            <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold border-2 border-white shadow-sm">
+              E
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-900 leading-none">Eliseo</p>
+              <p className="text-[10px] font-semibold text-indigo-500 mt-1">PLAN UNIVERSAL</p>
+            </div>
           </div>
         </div>
-      </div>
       </div>
     </>
   );

@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/calendar/page": "app/calendar/page.js",
+  "/grades/page": "app/grades/page.js",
+  "/notes/new/page": "app/notes/new/page.js",
+  "/notes/page": "app/notes/page.js",
+  "/settings/page": "app/settings/page.js",
+  "/study/page": "app/study/page.js",
+  "/page": "app/page.js"
+}
